@@ -1,7 +1,6 @@
 import type { D1Database, IncomingRequestCfProperties } from "@cloudflare/workers-types";
 import { betterAuth } from "better-auth";
 import { withCloudflare } from "better-auth-cloudflare";
-import { anonymous } from "better-auth/plugins";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { drizzle } from "drizzle-orm/d1";
 import { schema } from "../db";
@@ -15,6 +14,7 @@ function createAuth(env?: CloudflareBindings, cf?: IncomingRequestCfProperties, 
     return betterAuth({
         baseURL,
         secret: env?.BETTER_AUTH_SECRET,
+        trustedOrigins: env?.ORIGIN ? env.ORIGIN.split(",") : [],
         ...withCloudflare(
             {
                 autoDetectIpAddress: true,
@@ -34,14 +34,29 @@ function createAuth(env?: CloudflareBindings, cf?: IncomingRequestCfProperties, 
             {
                 emailAndPassword: {
                     enabled: true,
+                    disableSignUp: true,
                 },
-                plugins: [anonymous()],
+                socialProviders: {
+                    google: {
+                        clientId: env?.GOOGLE_CLIENT_ID ?? "",
+                        clientSecret: env?.GOOGLE_CLIENT_SECRET ?? "",
+                        hd: env?.STUDENT_EMAIL_DOMAIN,
+                    },
+                },
+                session: {
+                    updateAge: 0,
+                },
                 verification: {
                     storeInDatabase: true,
                 },
                 rateLimit: {
                     enabled: true,
                     storage: "database",
+                },
+                advanced: {
+                    crossSubDomainCookies: baseURL?.includes("localhost")
+                        ? { enabled: false }
+                        : { enabled: true, domain: ".mrlevine.com" },
                 },
             }
         ),

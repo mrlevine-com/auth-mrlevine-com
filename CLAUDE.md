@@ -1,4 +1,37 @@
-# better-auth-cloudflare
+# mrlevine-com/auth-mrlevine-com
+
+## This is a Fork
+
+> Forked from `zpg6/better-auth-cloudflare`
+
+- `main` branch to stay synced with upstream
+- `auth` branch to diverge minimally from upstream
+
+## Key Features of This Fork
+
+Adapts `examples/hono` into a shared auth service
+
+- Google OAuth (restricted to single domain)
+- Email Password (restricted to existing users)
+- One shared cookie valid across subdomains
+
+### Original Purpose
+
+> Can be used for other purposes
+
+- Google OAuth for students (all in one Google Workspace)
+- Email Password for teacher (not in Google Workspace)
+
+## Admin Report
+
+Immediately following the user's first message:
+
+- Diff `auth` against `main` and concisely summarize purpose of changes
+- Fetch Cloudflare status via MCP:
+    - Worker (last deploy time)
+    - D1 (recent activity)
+
+# zpg6/better-auth-cloudflare
 
 ## Code
 

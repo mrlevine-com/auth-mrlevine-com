@@ -13,7 +13,7 @@ const app = new Hono<{ Bindings: CloudflareBindings; Variables: Variables }>();
 app.use(
     "/api/auth/**",
     cors({
-        origin: "https://better-auth-cloudflare-hono.zpg6.workers.dev",
+        origin: (origin, c) => (c.env.ORIGIN.split(",").includes(origin) ? origin : c.env.ORIGIN.split(",")[0]),
         allowHeaders: ["Content-Type", "Authorization"],
         allowMethods: ["POST", "GET", "OPTIONS"],
         exposeHeaders: ["Content-Length"],
@@ -64,13 +64,18 @@ app.get("/", async c => {
             <h1 class="title">Dashboard - Hono</h1>
             <p class="subtitle">Powered by better-auth-cloudflare</p>
         </div>
-        
+
         <div id="status">Loading...</div>
-        
+
         <div id="not-logged-in" style="display:none;">
-            <button onclick="loginAnonymously()" class="primary-btn">Login Anonymously</button>
+            <button onclick="loginWithGoogle()" class="primary-btn">Sign in with Google</button>
+            <form onsubmit="loginWithPassword(event)" style="margin-top:16px;">
+                <input type="email" id="email" placeholder="Email" required style="display:block; margin:8px 0; padding:8px; width:100%; box-sizing:border-box;">
+                <input type="password" id="password" placeholder="Password" required style="display:block; margin:8px 0; padding:8px; width:100%; box-sizing:border-box;">
+                <button type="submit" class="primary-btn">Sign in</button>
+            </form>
         </div>
-        
+
         <div id="logged-in" style="display:none;">
             <div class="content">
                 <p>Welcome, <span id="user-name" style="font-weight: 600;"></span>!</p>
@@ -82,14 +87,14 @@ app.get("/", async c => {
                 </div>
             </div>
         </div>
-        
+
         <div id="protected-result"></div>
     </div>
-    
+
     <footer>
-        Powered by 
+        Powered by
         <a href="https://github.com/zpg6/better-auth-cloudflare" target="_blank" rel="noopener noreferrer">better-auth-cloudflare</a>
-        | 
+        |
         <a href="https://www.npmjs.com/package/better-auth-cloudflare" target="_blank" rel="noopener noreferrer">npm package</a>
     </footer>
 
@@ -101,23 +106,28 @@ app.get("/", async c => {
                 const response = await fetch('/api/auth/get-session', {
                     credentials: 'include'
                 });
-                
+
                 if (!response.ok) {
                     showNotLoggedIn();
                     return;
                 }
-                
+
                 const text = await response.text();
-                
+
                 if (!text || text.trim() === '') {
                     showNotLoggedIn();
                     return;
                 }
-                
+
                 const result = JSON.parse(text);
-                
+
                 if (result?.session) {
                     currentUser = result.user;
+                    const callbackURL = new URLSearchParams(window.location.search).get('callbackURL');
+                    if (callbackURL) {
+                        window.location.href = callbackURL;
+                        return;
+                    }
                     await showLoggedIn();
                 } else {
                     showNotLoggedIn();
@@ -128,47 +138,56 @@ app.get("/", async c => {
             }
         }
 
-        async function loginAnonymously() {
+        function getCallbackURL() {
+            return new URLSearchParams(window.location.search).get('callbackURL') || '/';
+        }
+
+        async function loginWithGoogle() {
             try {
-                // First check if already logged in
-                await checkStatus();
-                if (currentUser) {
-                    return;
-                }
-                
-                const response = await fetch('/api/auth/sign-in/anonymous', {
+                const response = await fetch('/api/auth/sign-in/social', {
                     method: 'POST',
                     credentials: 'include',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({})
+                    body: JSON.stringify({ provider: 'google', callbackURL: getCallbackURL() })
                 });
-                
-                const text = await response.text();
-                
-                if (!response.ok) {
-                    // Handle specific error for already anonymous
-                    if (text.includes('ANONYMOUS_USERS_CANNOT_SIGN_IN_AGAIN_ANONYMOUSLY')) {
-                        alert('You are already logged in anonymously!');
-                        await checkStatus(); // Refresh status
-                        return;
-                    }
-                    alert('Anonymous login failed: HTTP ' + response.status + ' - ' + text);
-                    return;
-                }
-                
-                const result = JSON.parse(text);
-                
-                if (result.user) {
-                    currentUser = result.user;
-                    await showLoggedIn();
+
+                const result = await response.json();
+
+                if (result.url) {
+                    window.location.href = result.url;
                 } else {
-                    alert('Anonymous login failed: ' + (result.error?.message || 'Unknown error'));
+                    alert('Google sign-in failed: ' + (result.message || 'Unknown error'));
                 }
             } catch (error) {
-                console.error('Anonymous login error:', error);
-                alert('Anonymous login failed: ' + error.message);
+                alert('Google sign-in failed: ' + error.message);
+            }
+        }
+
+        async function loginWithPassword(event) {
+            event.preventDefault();
+            try {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const response = await fetch('/api/auth/sign-in/email', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password, callbackURL: getCallbackURL() })
+                });
+
+                const result = await response.json();
+
+                if (result.user) {
+                    window.location.href = getCallbackURL();
+                } else {
+                    alert('Sign-in failed: ' + (result.message || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Sign-in failed: ' + error.message);
             }
         }
 
@@ -193,13 +212,13 @@ app.get("/", async c => {
         async function clearSession() {
             try {
                 // Clear cookies by setting them to expire
-                document.cookie.split(";").forEach(function(c) { 
-                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                document.cookie.split(";").forEach(function(c) {
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
                 });
-                
+
                 // Force logout
                 await logout();
-                
+
                 // Refresh page to clear any cached state
                 window.location.reload();
             } catch (error) {
@@ -214,11 +233,11 @@ app.get("/", async c => {
                     credentials: 'include'
                 });
                 const text = await response.text();
-                
-                document.getElementById('protected-result').innerHTML = 
+
+                document.getElementById('protected-result').innerHTML =
                     '<h3>Protected Route Result:</h3><div style="border:1px solid #ccc; padding:10px; margin:10px 0;">' + text + '</div>';
             } catch (error) {
-                document.getElementById('protected-result').innerHTML = 
+                document.getElementById('protected-result').innerHTML =
                     '<h3>Protected Route Error:</h3><div style="border:1px solid red; padding:10px; margin:10px 0;">' + error.message + '</div>';
             }
         }
@@ -227,23 +246,23 @@ app.get("/", async c => {
             document.getElementById('status').innerHTML = 'Status: Logged In';
             document.getElementById('not-logged-in').style.display = 'none';
             document.getElementById('logged-in').style.display = 'block';
-            
+
             if (currentUser) {
                 document.getElementById('user-name').textContent = currentUser.name || currentUser.email || 'User';
-                
-                document.getElementById('user-info').innerHTML = 
+
+                document.getElementById('user-info').innerHTML =
                     '<div class="info-row"><strong>Email:</strong> ' + (currentUser.email || 'Anonymous') + '</div>' +
                     '<div class="info-row"><strong>User ID:</strong> ' + currentUser.id + '</div>';
-                
+
                 // Fetch geolocation data
                 try {
                     const geoResponse = await fetch('/api/auth/cloudflare/geolocation', {
                         credentials: 'include'
                     });
-                    
+
                     if (geoResponse.ok) {
                         const geoData = await geoResponse.json();
-                        document.getElementById('geolocation-info').innerHTML = 
+                        document.getElementById('geolocation-info').innerHTML =
                             '<div class="info-row"><strong>Timezone:</strong> ' + (geoData.timezone || 'Unknown') + '</div>' +
                             '<div class="info-row"><strong>City:</strong> ' + (geoData.city || 'Unknown') + '</div>' +
                             '<div class="info-row"><strong>Country:</strong> ' + (geoData.country || 'Unknown') + '</div>' +
