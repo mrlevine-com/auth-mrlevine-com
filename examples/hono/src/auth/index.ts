@@ -32,6 +32,15 @@ function createAuth(env?: CloudflareBindings, cf?: IncomingRequestCfProperties, 
                 kv: env?.KV,
             },
             {
+                user: {
+                    additionalFields: {
+                        courses: {
+                            type: "string",
+                            required: false,
+                            defaultValue: "",
+                        },
+                    },
+                },
                 emailAndPassword: {
                     enabled: true,
                     disableSignUp: true,

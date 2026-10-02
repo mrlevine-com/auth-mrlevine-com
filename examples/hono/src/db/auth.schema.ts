@@ -15,6 +15,7 @@ export const users = sqliteTable("users", {
         .$onUpdate(() => /* @__PURE__ */ new Date())
         .notNull(),
     isAnonymous: integer("is_anonymous", { mode: "boolean" }).default(false),
+    courses: text("courses").default(""),
 });
 
 export const sessions = sqliteTable(
