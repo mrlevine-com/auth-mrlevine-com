@@ -61,7 +61,7 @@ app.get("/", async c => {
 <body>
     <div class="card">
         <div class="header">
-            <h1 class="title">Dashboard - Hono</h1>
+            <h1 class="title">auth-mrlevine-com</h1>
             <p class="subtitle">Powered by better-auth-cloudflare</p>
         </div>
 
